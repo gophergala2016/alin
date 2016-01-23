@@ -6,27 +6,30 @@ import (
 	"alin/config"
 	"labix.org/v2/mgo"
 	"strings"
+	"github.com/pquerna/ffjson/ffjson"
+	"labix.org/v2/mgo/bson"
 )
 
-type GridMongo struct {
+type AlinMongo struct {
 	Index   int                // Number from config array
 	Config  config.MongoConfig // Mongo config from global config
 	Session *mgo.Session
 	GridFS  *mgo.GridFS
+	DB		*mgo.Database
 	Active  bool
 }
 
-func MongoFromConfig(conf config.MongoConfig, index int) (mgo_grid *GridMongo, err error) {
-	mgo_grid = new(GridMongo)
-	mgo_grid.Config = conf
-	mgo_grid.Index = index
+func MongoFromConfig(conf config.MongoConfig, index int) (mongo *AlinMongo, err error) {
+	mongo = new(AlinMongo)
+	mongo.Config = conf
+	mongo.Index = index
 
-	return mgo_grid, mgo_grid.UpdateSession()
+	return mongo, mongo.UpdateSession()
 }
 
-func (mongo *GridMongo) UpdateGridFS() (err error) {
+func (mongo *AlinMongo) UpdateGridFS() (err error) {
 	conf := mongo.Config
-	db := mongo.Session.DB(conf.DB)
+	db := mongo.DB
 	if db == nil {
 		return errors.New(fmt.Sprintf("Database with name %s not Found for %s %s ", conf.DB, conf.HostPort, conf.ConnString))
 	}
@@ -39,13 +42,13 @@ func (mongo *GridMongo) UpdateGridFS() (err error) {
 	return nil
 }
 
-func (mgo_grid *GridMongo) UpdateSession() (err error) {
-	conf := mgo_grid.Config
+func (mongo *AlinMongo) UpdateSession() (err error) {
+	conf := mongo.Config
 	if len(conf.ConnString) > 0 {
 		if strings.Contains(conf.ConnString, "mongodb://") {
-			mgo_grid.Session, err = mgo.Dial(conf.ConnString)
+			mongo.Session, err = mgo.Dial(conf.ConnString)
 		} else {
-			mgo_grid.Session, err = mgo.Dial(fmt.Sprintf("mongodb://%s", conf.ConnString))
+			mongo.Session, err = mgo.Dial(fmt.Sprintf("mongodb://%s", conf.ConnString))
 		}
 
 	} else {
@@ -55,22 +58,47 @@ func (mgo_grid *GridMongo) UpdateSession() (err error) {
 			FailFast: true,
 		}
 
-		mgo_grid.Session, err = mgo.DialWithInfo(dial_info)
+		mongo.Session, err = mgo.DialWithInfo(dial_info)
 	}
 
 	if err != nil {
 		return err
 	}
 
-	mgo_grid.Session.SetSafe(&mgo.Safe{})
+	mongo.Session.SetSafe(&mgo.Safe{})
 	if len(conf.ConnString) == 0 {
-		mgo_grid.Session.SetMode(mgo.Monotonic, true)
+		mongo.Session.SetMode(mgo.Monotonic, true)
 	}
 
-	err = mgo_grid.UpdateGridFS()
-	if err != nil {
-		return err
+	mongo.DB = mongo.Session.DB(conf.DB)
+
+	// If prefix is defined then setting gridfs handler
+	if len(conf.Prefix) > 0 {
+		err = mongo.UpdateGridFS()
+		if err != nil {
+			return err
+		}
 	}
-	mgo_grid.Active = true
+	mongo.Active = true
 	return nil
+}
+
+func (mongo *AlinMongo) QueryFromJson(collection, json_str string) (result map[string]interface{}, err error) {
+	conf := mongo.Config
+	if mongo.DB == nil {
+		return errors.New(fmt.Sprintf("Database with name %s not Found for %s %s ", conf.DB, conf.HostPort, conf.ConnString))
+	}
+
+	c := mongo.DB.C(collection)
+	query := bson.M{}
+
+	err = ffjson.Unmarshal([]byte(json_str), &query)
+	if err != nil {
+		return
+	}
+
+	q := c.Find(query)
+	result = make(map[string]interface{})
+	err = q.All(&result)
+	return
 }

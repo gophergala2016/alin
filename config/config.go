@@ -6,7 +6,7 @@ import (
 )
 
 var (
-	GLOBAL_CONFIG     *GoGridConfig
+	GLOBAL_CONFIG     *AlinConfig
 )
 
 
@@ -17,7 +17,7 @@ type MongoConfig struct {
 	Prefix     string `json:"prefix"`
 }
 
-type GoGridConfig struct {
+type AlinConfig struct {
 	Mongo       	[]MongoConfig 					`json:"mongo"`
 	HealthCheck 	int           					`json:"health_check"`
 	LogFile     	string        					`json:"log_file"`
@@ -26,8 +26,8 @@ type GoGridConfig struct {
 	Port      		int    							`json:"port"`
 }
 
-func ParseConfig(filename string) (*GoGridConfig, error) {
-	conf := new(GoGridConfig)
+func ParseConfig(filename string) (*AlinConfig, error) {
+	conf := new(AlinConfig)
 	file, _ := os.Open(filename)
 	decoder := json.NewDecoder(file)
 	err := decoder.Decode(&conf)
