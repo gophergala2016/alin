@@ -1,7 +1,7 @@
 package mongo
 
 import (
-	"picsart-gogrid/config"
+	"alin/config"
 	"log"
 	"time"
 	"errors"
